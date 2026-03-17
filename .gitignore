@@ -37,3 +37,6 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Sensitive information
+telecred.txt

@@ -65,6 +65,7 @@ COMMANDS = {
     "sessions":  "Manage accounts — sessions [list|switch|add]",
     "theme":     "Switch theme — theme <dark|light|gruvbox|tokyo>",
     "config":    "Show/set config — config [key] [value]",
+    "logout":    "Log out and delete local credentials/session",
     "clear":     "Clear the screen",
     "help":      "Show help",
     "quit":      "Exit telecli",

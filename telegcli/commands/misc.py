@@ -2,7 +2,7 @@
 telegcli.commands.misc
 ────────────────────
 Commands: me, schedule, automate, template, draft, sessions,
-          theme, config, clear, help
+          theme, config, logout, clear, help
 
 Fixes applied:
   #8  — async prompts via repl._ask()
@@ -563,6 +563,81 @@ async def cmd_config(args: list[str]) -> None:
     print_success(f"{key} = {val}")
 
 
+# ── logout ────────────────────────────────────────────────────────────────────
+
+async def cmd_logout(args: list[str]) -> None:
+    """
+    logout [--yes] [--all-sessions]
+
+    Logs out from Telegram and removes local credentials.
+    - Clears api_id/api_hash from config.
+    - Deletes current session file(s) from config dir.
+    - With --all-sessions, deletes every *.session file.
+    """
+    cfg = get_config()
+
+    force = "--yes" in args
+    all_sessions = "--all-sessions" in args
+
+    if not force:
+        answer = (await _ask("Log out and delete local credentials? [y/N]")).strip().lower()
+        if answer not in ("y", "yes"):
+            print_info("Cancelled.")
+            return
+
+    # Revoke Telegram auth key if connected.
+    try:
+        if getattr(tg, "raw", None):
+            await tg.raw.log_out()
+    except Exception as e:
+        log.warning("Remote logout failed: %s", e)
+        print_warning("Could not revoke remote session cleanly. Continuing local cleanup.")
+
+    try:
+        await tg.disconnect()
+    except Exception:
+        pass
+
+    deleted_files = 0
+    pending_cleanup: list[str] = []
+
+    if all_sessions:
+        targets = [p for pat in ("*.session", "*.session-journal") for p in cfg.config_dir.glob(pat)]
+    else:
+        session_name = cfg.get("session_name", "telegcli")
+        targets = [
+            cfg.config_dir / f"{session_name}.session",
+            cfg.config_dir / f"{session_name}.session-journal",
+        ]
+
+    for path in targets:
+        if not path.exists():
+            continue
+        try:
+            path.unlink(missing_ok=True)
+            deleted_files += 1
+        except OSError as e:
+            pending_cleanup.append(str(path))
+            log.warning("Deferred session cleanup for %s: %s", path, e)
+
+    if pending_cleanup:
+        cfg.set("pending_session_cleanup", pending_cleanup)
+        print_warning(
+            "Some session files are locked right now and will be deleted when the app exits."
+        )
+    else:
+        cfg.set("pending_session_cleanup", [])
+
+    cfg.set("api_id", 0)
+    cfg.set("api_hash", "")
+
+    scope = "all sessions" if all_sessions else "current session"
+    print_success(
+        f"Logged out. Removed {deleted_files} local session file(s) for {scope}, and cleared API credentials."
+    )
+    print_info("Run 'quit' now. On exit, any deferred cleanup will complete and next launch will ask for credentials.")
+
+
 # ── clear / help ──────────────────────────────────────────────────────────────
 
 async def cmd_clear(args: list[str]) -> None:
@@ -600,7 +675,7 @@ async def cmd_help(args: list[str]) -> None:
         "Analysis":   ["stats", "export"],
         "Productivity": ["schedule", "template", "draft", "automate"],
         "Sessions":   ["sessions"],
-        "Utility":    ["me", "theme", "config", "clear", "help", "quit"],
+        "Utility":    ["me", "theme", "config", "logout", "clear", "help", "quit"],
     }
 
     for group, cmds in groups.items():

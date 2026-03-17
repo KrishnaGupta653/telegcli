@@ -133,8 +133,33 @@ class TeleCli:
         finally:
             automation_engine.stop()
             await self._tg.disconnect()
+            self._run_pending_session_cleanup()
             console.print(f"[{p['dim']}]Disconnected. Goodbye.[/]")
             log.info("Session ended cleanly")
+
+    def _run_pending_session_cleanup(self) -> None:
+        """Delete session files that were locked during in-session logout on Windows."""
+        pending = self._cfg.get("pending_session_cleanup", [])
+        if not pending:
+            return
+
+        removed = 0
+        failed: list[str] = []
+        for raw in pending:
+            from pathlib import Path
+            path = Path(raw)
+            try:
+                if path.exists():
+                    path.unlink(missing_ok=True)
+                    removed += 1
+            except OSError:
+                failed.append(str(path))
+
+        self._cfg.set("pending_session_cleanup", failed)
+        if failed:
+            log.warning("Pending session cleanup incomplete: %s", failed)
+        elif removed:
+            log.info("Deferred session cleanup completed (%d files)", removed)
 
     # ── command dispatcher ────────────────────────────────────────────
 

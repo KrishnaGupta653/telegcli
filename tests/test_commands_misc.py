@@ -129,3 +129,101 @@ async def test_automate_add_with_options(mock_config):
     assert rules[0]["only_private"] is True
     assert rules[0]["max_fires_per_hour"] == 3
     assert rules[0]["reply"] == "hi there"
+
+
+# ── logout ────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_logout_current_session_clears_creds_and_deletes_files(mock_config):
+    mock_config.set("api_id", 12345)
+    mock_config.set("api_hash", "secret")
+    mock_config.set("session_name", "work")
+
+    session_file = mock_config.config_dir / "work.session"
+    journal_file = mock_config.config_dir / "work.session-journal"
+    other_session = mock_config.config_dir / "other.session"
+    session_file.write_text("x", encoding="utf-8")
+    journal_file.write_text("x", encoding="utf-8")
+    other_session.write_text("x", encoding="utf-8")
+
+    raw = AsyncMock()
+    raw.log_out = AsyncMock()
+    fake_tg = MagicMock()
+    fake_tg.raw = raw
+    fake_tg.disconnect = AsyncMock()
+
+    with patch("telegcli.commands.misc.get_config", return_value=mock_config), \
+         patch("telegcli.commands.misc.tg", fake_tg), \
+         patch("telegcli.commands.misc.print_success"), \
+         patch("telegcli.commands.misc.print_info"):
+
+        from telegcli.commands.misc import cmd_logout
+        await cmd_logout(["--yes"])
+
+    raw.log_out.assert_awaited_once()
+    fake_tg.disconnect.assert_awaited_once()
+    assert not session_file.exists()
+    assert not journal_file.exists()
+    assert other_session.exists()
+    assert mock_config.get("api_id") == 0
+    assert mock_config.get("api_hash") == ""
+
+
+@pytest.mark.asyncio
+async def test_logout_all_sessions_deletes_every_session_file(mock_config):
+    mock_config.set("api_id", 1)
+    mock_config.set("api_hash", "x")
+
+    a = mock_config.config_dir / "a.session"
+    b = mock_config.config_dir / "b.session"
+    j = mock_config.config_dir / "b.session-journal"
+    a.write_text("x", encoding="utf-8")
+    b.write_text("x", encoding="utf-8")
+    j.write_text("x", encoding="utf-8")
+
+    raw = AsyncMock()
+    raw.log_out = AsyncMock()
+    fake_tg = MagicMock()
+    fake_tg.raw = raw
+    fake_tg.disconnect = AsyncMock()
+
+    with patch("telegcli.commands.misc.get_config", return_value=mock_config), \
+         patch("telegcli.commands.misc.tg", fake_tg), \
+         patch("telegcli.commands.misc.print_success"), \
+         patch("telegcli.commands.misc.print_info"):
+
+        from telegcli.commands.misc import cmd_logout
+        await cmd_logout(["--yes", "--all-sessions"])
+
+    assert not a.exists()
+    assert not b.exists()
+    assert not j.exists()
+
+
+@pytest.mark.asyncio
+async def test_logout_sets_pending_cleanup_when_session_file_locked(mock_config):
+    mock_config.set("api_id", 12345)
+    mock_config.set("api_hash", "secret")
+    mock_config.set("session_name", "work")
+
+    session_file = mock_config.config_dir / "work.session"
+    session_file.write_text("x", encoding="utf-8")
+
+    raw = AsyncMock()
+    raw.log_out = AsyncMock()
+    fake_tg = MagicMock()
+    fake_tg.raw = raw
+    fake_tg.disconnect = AsyncMock()
+
+    with patch("telegcli.commands.misc.get_config", return_value=mock_config), \
+         patch("telegcli.commands.misc.tg", fake_tg), \
+         patch("telegcli.commands.misc.print_success"), \
+         patch("telegcli.commands.misc.print_info"), \
+         patch("telegcli.commands.misc.print_warning"):
+
+        from telegcli.commands import misc as misc_mod
+        with patch("pathlib.Path.unlink", side_effect=PermissionError("locked")):
+            await misc_mod.cmd_logout(["--yes"])
+
+    pending = mock_config.get("pending_session_cleanup", [])
+    assert str(session_file) in pending

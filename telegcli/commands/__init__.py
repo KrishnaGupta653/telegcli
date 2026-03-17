@@ -22,7 +22,7 @@ from telegcli.commands.contacts import (
 )
 from telegcli.commands.misc import (
     cmd_me, cmd_schedule, cmd_automate, cmd_template, cmd_draft,
-    cmd_sessions, cmd_theme, cmd_config, cmd_clear, cmd_help,
+    cmd_sessions, cmd_theme, cmd_config, cmd_logout, cmd_clear, cmd_help,
 )
 
 DISPATCH: dict = {
@@ -78,6 +78,7 @@ DISPATCH: dict = {
     "me":        cmd_me,
     "theme":     cmd_theme,
     "config":    cmd_config,
+    "logout":    cmd_logout,
     "clear":     cmd_clear,
     "help":      cmd_help,
     "?":         cmd_help,
