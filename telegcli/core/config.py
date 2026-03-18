@@ -34,12 +34,18 @@ DEFAULTS: dict[str, Any] = {
     "auto_read":         False,
     "download_dir":      str(Path.home() / "Downloads" / "telegcli"),
     "image_preview":     True,
+    "image_preview_width": 56,
+    "image_preview_max": 3,
+    "image_preview_photos_only": False,
     "date_format":       "%b %d %H:%M",
     "msg_limit":         50,
+    "max_api_retries":   3,
     "proxy":             None,
     "aliases":           {},
     "automations":       [],
     "templates":         {},
+    "bot_profiles":      [],
+    "bot_active_profile": "",
     "no_color":          False,
     "keybinds": {
         "quit":        "q",
@@ -66,12 +72,17 @@ _TYPE_MAP: dict[str, type] = {
     "api_id":            int,
     "schema_version":    int,
     "msg_limit":         int,
+    "max_api_retries":   int,
     "auto_read":         bool,
     "notifications":     bool,
     "notification_sound": bool,
     "image_preview":     bool,
+    "image_preview_width": int,
+    "image_preview_max": int,
+    "image_preview_photos_only": bool,
     "no_color":          bool,
     "api_hash":          str,
+    "bot_active_profile": str,
     "session_name":      str,
     "theme":             str,
     "download_dir":      str,
@@ -140,6 +151,12 @@ def _validate(data: dict) -> dict:
         result["theme"] = "dark"
     if not isinstance(result["api_id"], int) or result["api_id"] < 0:
         result["api_id"] = 0
+    if not isinstance(result["image_preview_width"], int):
+        result["image_preview_width"] = DEFAULTS["image_preview_width"]
+    if not isinstance(result["image_preview_max"], int):
+        result["image_preview_max"] = DEFAULTS["image_preview_max"]
+    result["image_preview_width"] = max(16, min(120, result["image_preview_width"]))
+    result["image_preview_max"] = max(0, min(10, result["image_preview_max"]))
     if not isinstance(result.get("keybinds"), dict):
         result["keybinds"] = dict(DEFAULTS["keybinds"])
     else:
@@ -179,10 +196,23 @@ class Config:
                 migrated = _migrate(raw)
                 self._data = _validate(_deep_merge(DEFAULTS, migrated))
                 return
-            except (json.JSONDecodeError, OSError) as exc:
+            except json.JSONDecodeError as exc:
+                import logging
+                logger = logging.getLogger("telegcli.config")
+                logger.warning(
+                    "Config file corrupted: %s", exc
+                )
+                # Backup corrupted config
+                try:
+                    backup_file = self._config_file.with_suffix(".json.bak")
+                    backup_file.write_text(self._config_file.read_text(encoding="utf-8"), encoding="utf-8")
+                    logger.info(f"Config backed up to {backup_file}")
+                except OSError:
+                    pass
+            except OSError as exc:
                 import logging
                 logging.getLogger("telegcli.config").warning(
-                    "Config parse error (%s) — using defaults", exc
+                    "Config file read error (%s) — using defaults", exc
                 )
         self._data = _validate(dict(DEFAULTS))
         self._save()
@@ -239,6 +269,18 @@ class Config:
 
     def dump(self) -> str:
         safe = {k: v for k, v in self._data.items() if k not in ("api_hash",)}
+        profiles = safe.get("bot_profiles")
+        if isinstance(profiles, list):
+            masked = []
+            for p in profiles:
+                if isinstance(p, dict):
+                    q = dict(p)
+                    if "token" in q and q["token"]:
+                        q["token"] = "***"
+                    masked.append(q)
+                else:
+                    masked.append(p)
+            safe["bot_profiles"] = masked
         return json.dumps(safe, indent=2)
 
     def reset(self) -> None:

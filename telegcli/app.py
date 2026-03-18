@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import getpass
+import io
 import logging
+import re
 import sys
 from typing import Optional
 
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Prompt
 
@@ -56,6 +59,13 @@ class TeleCli:
                 print_error("API credentials required. Exiting.")
                 return
 
+        if not self._credentials_look_valid():
+            print_warning("Saved Telegram API credentials look invalid. Please re-enter them.")
+            await self._first_run_setup()
+            if not self._credentials_look_valid():
+                print_error("Valid api_id/api_hash required. Exiting.")
+                return
+
         # Step 2: connect
         console.print(f"[{p['dim']}]Connecting…[/]", end=" ")
         try:
@@ -69,9 +79,11 @@ class TeleCli:
         # Step 3: authenticate
         try:
             ok = await self._tg.ensure_authorized({
+                "choose_login_method": self._choose_login_method,
                 "get_phone":  self._prompt_phone,
                 "get_code":   self._prompt_code,
                 "get_2fa":    self._prompt_2fa,
+                "show_qr":    self._show_qr,
                 "show_error": self._show_error,
             })
         except Exception as e:
@@ -132,6 +144,11 @@ class TeleCli:
             await self._repl.run(self._dispatch)
         finally:
             automation_engine.stop()
+            try:
+                from telegcli.bot.manager import get_bot_manager
+                await get_bot_manager().stop()
+            except Exception:
+                pass
             await self._tg.disconnect()
             self._run_pending_session_cleanup()
             console.print(f"[{p['dim']}]Disconnected. Goodbye.[/]")
@@ -222,8 +239,16 @@ class TeleCli:
         except KeyboardInterrupt:
             return
 
+        api_hash = api_hash.strip()
         if not api_hash:
             print_error("api_hash cannot be empty.")
+            return
+
+        if not re.fullmatch(r"[0-9a-fA-F]{32}", api_hash):
+            print_error(
+                "Invalid api_hash format. It should be a 32-character hexadecimal string "
+                f"(got length {len(api_hash)})."
+            )
             return
 
         self._cfg.set("api_id", api_id)
@@ -250,6 +275,54 @@ class TeleCli:
             lambda: Prompt.ask(f"[{p['accent']}]Telegram OTP[/]")
         )
 
+    async def _choose_login_method(self) -> str:
+        print_info("Login method: type 'phone' or 'qr' (default: phone)")
+
+        for _ in range(3):
+            raw = (await self._repl.prompt_async("login method [phone/qr]:")).strip().lower()
+            if not raw:
+                return "phone"
+            if raw in {"phone", "qr"}:
+                return raw
+            print_warning("Please enter 'phone' or 'qr'.")
+
+        print_warning("Too many invalid attempts. Using phone login.")
+        return "phone"
+
+    async def _show_qr(self, url: str) -> None:
+        p = get_palette()
+        console = get_console()
+
+        try:
+            import qrcode
+
+            qr = qrcode.QRCode(border=1)
+            qr.add_data(url)
+            qr.make(fit=True)
+
+            out = io.StringIO()
+            qr.print_ascii(out=out, invert=True)
+            ascii_qr = out.getvalue()
+
+            console.print(Panel(
+                (
+                    f"[{p['fg']}]Open Telegram on your phone and scan this QR:\n\n[/]"
+                    f"[{p['dim']}]Settings -> Devices -> Link Desktop Device[/]\n\n"
+                    f"[{p['accent']}]Login URL:[/] {escape(url)}\n\n"
+                    f"[{p['fg']}]{escape(ascii_qr)}[/]"
+                ),
+                title=f"[{p['accent']}]QR Login[/]",
+                border_style=p["separator"],
+            ))
+        except ImportError:
+            print_warning("QR rendering requires the 'qrcode' package, which is not installed.")
+            print_info("Install it with: pip install qrcode")
+            print_warning("Using login URL instead:")
+            print_info(url)
+        except Exception:
+            print_warning("Could not render QR in terminal. Use this login URL instead:")
+            print_info(url)
+
     async def _prompt_2fa(self) -> str:
         hint = await self._tg.get_password_hint()
         prompt_str = f"2FA password{f' (hint: {hint})' if hint else ''}: "
@@ -258,3 +331,8 @@ class TeleCli:
 
     async def _show_error(self, msg: str) -> None:
         print_error(msg)
+
+    def _credentials_look_valid(self) -> bool:
+        api_id = self._cfg.get("api_id", 0)
+        api_hash = str(self._cfg.get("api_hash", "")).strip()
+        return isinstance(api_id, int) and api_id > 0 and bool(re.fullmatch(r"[0-9a-fA-F]{32}", api_hash))

@@ -116,7 +116,47 @@ async def cmd_watch(args: list[str]) -> None:
 
     try:
         # Fix #6: proper event-driven stop, not magic sleep
+        # Feature 6: Support quick reply while watching
+        from telegcli.ui.repl import _repl
+        
+        async def input_handler():
+            """Handle user commands while watching"""
+            while True:
+                try:
+                    user_input = await _repl.prompt_async(
+                        "[{p['dim']}]commands: r <text> (reply), s <text> (send), q (quit)[/] > ",
+                        completer=None
+                    )
+                    if not user_input:
+                        continue
+                    
+                    parts = user_input.split(" ", 1)
+                    cmd = parts[0].lower() if parts else ""
+                    text = parts[1] if len(parts) > 1 else ""
+                    
+                    if cmd == "q":
+                        stop_event.set()
+                        break
+                    elif cmd in ("r", "reply") and filter_id and text:
+                        await tg.send_message(filter_id, text, reply_to=None)
+                        console.print(f"[{p['success']}]✓ Reply sent[/]")
+                    elif cmd in ("s", "send") and text:
+                        if not filter_id:
+                            console.print(f"[{p['warning']}]⚠ Specify target chat[/]")
+                            continue
+                        await tg.send_message(filter_id, text)
+                        console.print(f"[{p['success']}]✓ Message sent[/]")
+                    else:
+                        console.print(f"[{p['dim']}]Available: r <text>, s <text>, q[/]")
+                except EOFError:
+                    break
+                except Exception as e:
+                    log.warning("Error in input handler: %s", e)
+        
+        # Run input handler in background
+        input_task = asyncio.create_task(input_handler())
         await stop_event.wait()
+        input_task.cancel()
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:

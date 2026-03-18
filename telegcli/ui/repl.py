@@ -27,49 +27,86 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from telegcli.core.config import get_config
 
+# Command descriptions: short but clear with examples for complex commands
 COMMANDS = {
-    "list":      "List recent chats",
-    "read":      "Read messages  — read <n> [count]",
-    "send":      "Send a message — send <n> [text]",
-    "reply":     "Reply to a msg — reply <n> <msg_id> [text]",
-    "edit":      "Edit a message — edit <n> <msg_id> [text]",
-    "delete":    "Delete messages — delete <n> <msg_id> [--local]",
-    "forward":   "Forward a msg  — forward <from> <msg_id> <to>",
-    "react":     "React to a msg — react <n> <msg_id> [emoji]",
-    "search":    "Search dialogs — search <query>",
-    "gsearch":   "Global search  — gsearch <query>",
-    "info":      "Chat/user info  — info <n>",
-    "upload":    "Upload a file  — upload <n> <path> [caption]",
-    "download":  "Download media — download <n> <msg_id> [dest]",
-    "gallery":   "Media gallery  — gallery <n> [count]",
-    "watch":     "Live message stream — watch [chat]",
-    "contacts":  "List contacts",
-    "add":       "Add a contact  — add <phone> <name>",
-    "block":     "Block a user   — block <n>",
-    "unblock":   "Unblock a user — unblock <n>",
-    "mute":      "Mute a chat    — mute <n>",
-    "unmute":    "Unmute a chat  — unmute <n>",
-    "archive":   "Archive a chat — archive <n>",
-    "markread":  "Mark as read   — markread <n>",
-    "pin":       "Pin a message  — pin <n> <msg_id>",
-    "unpin":     "Unpin a message — unpin <n> <msg_id>",
-    "copy":      "Copy message to clipboard — copy <n> <msg_id>",
-    "me":        "Your account info",
-    "schedule":  "Schedule a message — schedule <n> <YYYY-MM-DD HH:MM> <text>",
-    "automate":  "Manage automations — automate [list|add|remove|clear]",
-    "template":  "Message templates — template [save|use|list|delete]",
-    "draft":     "Saved drafts — draft [save|list|send|delete]",
-    "export":    "Export chat — export <n> [count] [--format json|csv|txt|html]",
-    "stats":     "Chat statistics — stats <n> [count]",
-    "thread":    "Show message thread — thread <n> <msg_id>",
-    "sessions":  "Manage accounts — sessions [list|switch|add]",
-    "theme":     "Switch theme — theme <dark|light|gruvbox|tokyo>",
-    "config":    "Show/set config — config [key] [value]",
-    "logout":    "Log out and delete local credentials/session",
-    "clear":     "Clear the screen",
-    "help":      "Show help",
-    "quit":      "Exit telecli",
-    "exit":      "Exit telecli",
+    # Messages
+    "send":      "✍️  Send a message  |  send 1 Hello!  |  send @chat Message here",
+    "reply":     "💬 Reply to specific message  |  reply 1 42 Thanks!",
+    "edit":      "✏️  Edit your message  |  edit 1 42 New text",
+    "delete":    "🗑️  Delete message everywhere  |  delete 1 42  |  delete 1 10-20 --force",
+    "forward":   "→ Forward message to another chat  |  forward 1 42 @saved  |  forward 1 42 @chat --edit",
+    "react":     "😊 React with emoji  |  react 1 42 👍  |  react 1 42 ❤️",
+    "copy":      "📋 Copy message text to clipboard  |  copy 1 42",
+    "preview":   "🖼️  Show image as ASCII art  |  preview 1 42",
+    "thread":    "🧵 Show message + all replies  |  thread 1 42",
+    
+    # Chats
+    "list":      "📋 Show recent chats with latest message  |  list 30  |  list 25 --preview",
+    "read":      "📖 Read messages from a chat  |  read 1  |  read @friend --first-unread  |  read 1 --type photo",
+    "search":    "🔍 Search in dialog names  |  search john  |  search work group",
+    "search":    "🔍 Search in dialog names  |  search john  |  search work group",
+    "gsearch":   "🔎 Search across all messages  |  gsearch invoice 2024",
+    "info":      "ℹ️  View chat or user details  |  info 1  |  info @username",
+    "pins":      "📌 Show pinned messages in chat  |  pins 1  |  pins @friend 50",
+    "mute":      "🔇 Mute notifications  |  mute 1",
+    "unmute":    "🔔 Unmute notifications  |  unmute 1",
+    "archive":   "📦 Archive chat (hide from main list)  |  archive 1",
+    "markread":  "✓ Mark all messages as read  |  markread 1",
+    "gallery":   "🎞️  List all photos & media  |  gallery 1  |  gallery 1 100",
+    
+    # Files
+    "upload":    "📤 Send file/photo  |  upload 1 ~/photo.jpg  |  upload 1 file.pdf",
+    "download":  "📥 Save media to computer  |  download 1 42",
+    
+    # Pin/Unpin
+    "pin":       "📌 Pin message to chat  |  pin 1 42",
+    "unpin":     "📍 Unpin message  |  unpin 1 42",
+    
+    # Contacts
+    "contacts":  "👥 List all your saved contacts",
+    "add":       "➕ Add contact  |  add +1234567890 John Smith",
+    "block":     "🚫 Block user from messaging  |  block 1",
+    "unblock":   "✅ Unblock user  |  unblock 1",
+    
+    # Watch
+    "watch":     "📡 See new messages as they arrive  |  watch  |  watch @friend  |  Type 'r <text>' to quick reply",
+    
+    # Analytics
+    "stats":     "📊 Chat statistics (daily/hourly breakdown)  |  stats 1  |  stats 1 500",
+    "export":    "💾 Export chat as JSON/CSV/HTML  |  export 1 200 --format csv",
+    
+    # Auto-tasks
+    "schedule":  "⏰ Send message at specific time  |  schedule 1 2025-12-31 09:00 Happy New Year!",
+    "scheduled": "📅 List scheduled messages in chat  |  scheduled 1  |  scheduled @friend",
+    "cancel-scheduled": "❌ Cancel a scheduled message  |  cancel-scheduled 1 5",
+    "automate":  "🤖 Auto-reply rules  |  automate add  |  automate list",
+    "template":  "🔖 Save & reuse messages  |  template save greet Hi!  |  template use greet",
+    "draft":     "📝 Save draft messages  |  draft save @chat My message  |  draft send 1  |  Auto-saves every 30s",
+    "snippet":   "🎯 Smart snippets & templates  |  snippet save hello Hi!  |  snippet use 1 hello",
+    "reactions": "😊 See who reacted to message  |  reactions 1 42  |  reactions @chat 123 --json",
+    "analytics": "📊 Advanced chat analytics  |  analytics 1 --daily  |  analytics @chat --top-senders",
+    "tag":       "🏷️  Organize chats with tags  |  tag add 1 work  |  tag list  |  tag show work",
+    "group":     "📂 Create named groups of tagged chats  |  group create work @work  |  group list",
+    "backup":    "💾 Full backup/export with compression  |  backup ~/backup.tar.gz  |  backup ~/msgs.json --format json",
+    "restore":   "📥 Restore messages from backup  |  restore ~/backup.tar.gz --preview  |  restore ~/backup.tar.gz --chat 1",
+    "workflow":  "⚙️  Advanced automations with conditions  |  workflow create myrule  |  workflow list  |  workflow run myrule",
+    
+    # Sessions
+    "sessions":  "🔐 Switch between accounts  |  sessions list  |  sessions switch work",
+    
+    # Bot mode
+    "bot":       "🤖 Bot service (Telegram Bot API)  |  bot create  |  bot start  |  bot doctor  |  help bot",
+    
+    # Utility
+    "me":        "👤 Your account info (phone, name, username)",
+    "theme":     "🎨 Change color scheme  |  theme dark  |  theme gruvbox",
+    "shortcuts": "⌨️  Display keyboard shortcuts and tips",
+    "config":    "⚙️  View/change settings  |  config  |  config msg_limit 100",
+    "logout":    "🚪 Log out and clear session",
+    "clear":     "🔲 Clear screen",
+    "help":      "❓ Show help  |  help  |  help read",
+    "quit":      "👋 Exit telegcli",
+    "exit":      "👋 Exit telegcli",
 }
 
 

@@ -28,8 +28,16 @@ log = logging.getLogger("telegcli.rate_limiter")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-MAX_RETRIES = 3
 _RETRYABLE = (FloodWaitError, ServerError)
+
+
+def _get_max_retries() -> int:
+    """Get max API retries from config or default to 3."""
+    try:
+        from telegcli.core.config import get_config
+        return int(get_config().get("max_api_retries", 3))
+    except Exception:
+        return 3
 
 
 def rate_limited(func: F) -> F:
@@ -42,6 +50,7 @@ def rate_limited(func: F) -> F:
     """
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        max_retries = _get_max_retries()
         attempt = 0
         while True:
             try:
@@ -50,23 +59,23 @@ def rate_limited(func: F) -> F:
                 wait = e.seconds + 1
                 log.warning(
                     "FloodWaitError in %s — waiting %ds (attempt %d/%d)",
-                    func.__name__, wait, attempt + 1, MAX_RETRIES,
+                    func.__name__, wait, attempt + 1, max_retries,
                 )
                 print_warning(
                     f"Telegram rate limit — waiting {wait}s before retrying…"
                 )
                 await asyncio.sleep(wait)
                 attempt += 1
-                if attempt >= MAX_RETRIES:
+                if attempt >= max_retries:
                     raise
             except ServerError as e:
                 wait = 5
                 attempt += 1
                 log.warning(
                     "Telegram ServerError in %s: %s — retry %d/%d in %ds",
-                    func.__name__, e, attempt, MAX_RETRIES, wait,
+                    func.__name__, e, attempt, max_retries, wait,
                 )
-                if attempt >= MAX_RETRIES:
+                if attempt >= max_retries:
                     raise
                 await asyncio.sleep(wait)
             except AuthKeyError:

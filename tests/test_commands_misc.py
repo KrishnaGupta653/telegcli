@@ -131,6 +131,50 @@ async def test_automate_add_with_options(mock_config):
     assert rules[0]["reply"] == "hi there"
 
 
+@pytest.mark.asyncio
+async def test_config_set_subcommand_sets_bool(mock_config):
+    with patch("telegcli.commands.misc.get_config", return_value=mock_config), \
+         patch("telegcli.commands.misc.get_console") as mock_console, \
+         patch("telegcli.commands.misc.get_palette", return_value={k: "" for k in ["accent","fg","dim","accent2","separator"]}), \
+         patch("telegcli.commands.misc.print_success"):
+
+        from telegcli.commands.misc import cmd_config
+        mock_console.return_value = MagicMock()
+        await cmd_config(["set", "image_preview", "false"])
+
+    assert mock_config.get("image_preview") is False
+
+
+@pytest.mark.asyncio
+async def test_config_key_value_single_arg_sets_bool(mock_config):
+    with patch("telegcli.commands.misc.get_config", return_value=mock_config), \
+         patch("telegcli.commands.misc.get_console") as mock_console, \
+         patch("telegcli.commands.misc.get_palette", return_value={k: "" for k in ["accent","fg","dim","accent2","separator"]}), \
+         patch("telegcli.commands.misc.print_success"):
+
+        from telegcli.commands.misc import cmd_config
+        mock_console.return_value = MagicMock()
+        await cmd_config(["image_preview=false"])
+
+    assert mock_config.get("image_preview") is False
+
+
+@pytest.mark.asyncio
+async def test_config_unset_restores_default(mock_config):
+    mock_config.set("image_preview", False)
+
+    with patch("telegcli.commands.misc.get_config", return_value=mock_config), \
+         patch("telegcli.commands.misc.get_console") as mock_console, \
+         patch("telegcli.commands.misc.get_palette", return_value={k: "" for k in ["accent","fg","dim","accent2","separator"]}), \
+         patch("telegcli.commands.misc.print_success"):
+
+        from telegcli.commands.misc import cmd_config
+        mock_console.return_value = MagicMock()
+        await cmd_config(["unset", "image_preview"])
+
+    assert mock_config.get("image_preview") is True
+
+
 # ── logout ────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

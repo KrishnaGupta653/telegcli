@@ -2,7 +2,7 @@
 telegcli.commands.chats
 ─────────────────────
 Commands: list, info, search, gsearch, mute, unmute, archive, markread,
-          stats, export, gallery
+          stats, export, gallery, pins
 
 Fixes applied:
   #17 — timezone normalization in stats (msg.date.astimezone())
@@ -10,6 +10,9 @@ Fixes applied:
   #11 — export supports --format json|csv|txt|html + full history flag
   Feature F — gallery command (media index)
   Feature J — stats --json
+  
+New Features:
+  Feature 2 — pins command (pinned messages browser) --json support
 """
 
 from __future__ import annotations
@@ -44,24 +47,47 @@ log = logging.getLogger("telegcli.chats")
 # ── list ──────────────────────────────────────────────────────────────────────
 
 async def cmd_list(args: list[str]) -> None:
-    """list [count]  — list recent dialogs."""
+    """list [count] [--preview]  — list recent dialogs. Feature 15: --preview shows link titles."""
     console = get_console()
     p = get_palette()
 
     limit = 25
-    if args:
+    show_link_preview = "--preview" in args
+    clean_args = [a for a in args if a != "--preview"]
+    
+    if clean_args:
         try:
-            limit = int(args[0])
+            limit = int(clean_args[0])
         except ValueError:
             pass
 
     with console.status("[bold blue]Loading chats…[/]"):
         dialogs = await tg.get_dialogs(limit=limit)
+    
+    # Feature 15: Add link preview if requested
+    if show_link_preview:
+        for dialog in dialogs:
+            try:
+                messages = await tg.get_messages(dialog, limit=3)
+                for msg in messages:
+                    if msg.text and ("http://" in msg.text or "https://" in msg.text):
+                        # Extract first URL
+                        import re
+                        urls = re.findall(r'https?://\S+', msg.text)
+                        if urls:
+                            # Store link info in dialog for rendering
+                            dialog.link_preview = urls[0]
+                        break
+            except Exception:
+                pass
 
     dialog_cache.update(dialogs)
     table = render_dialog_list(dialogs)
     console.print(table)
     console.print(f"[{p['dim']}]  {len(dialogs)} chats loaded[/]")
+    
+    if show_link_preview:
+        console.print(f"[{p['info']}]💡 URLs shown in first 3 messages of each chat[/]")
 
 
 # ── info ──────────────────────────────────────────────────────────────────────
@@ -388,6 +414,86 @@ async def cmd_export(args: list[str]) -> None:
     print_success(
         f"Exported {len(export_data)} messages → {out_path}  [{fmt.upper()}]"
     )
+
+
+# ── pins — Feature 2: Pinned messages browser ─────────────────────────────────
+
+async def cmd_pins(args: list[str]) -> None:
+    """
+    pins <chat>         — show all pinned messages
+    pins <chat> --json  — JSON output for parsing
+    pins <chat> [limit] — show last N pinned messages (default 20)
+    
+    Feature 2: Pinned messages browser
+    """
+    if not args:
+        print_error("Usage: pins <chat> [limit] [--json]")
+        return
+    
+    console = get_console()
+    p = get_palette()
+    
+    limit = 20
+    output_json = "--json" in args
+    
+    # Parse arguments
+    entity_query = args[0]
+    for arg in args[1:]:
+        if arg == "--json":
+            continue
+        elif arg.isdigit():
+            limit = int(arg)
+    
+    entity = await resolve_entity(entity_query)
+    if entity is None:
+        return
+    
+    with console.status("[bold blue]Loading pinned messages…[/]"):
+        try:
+            # Fetch pinned messages (Telethon provides this via get_messages with search=None but pinned filter)
+            # Alternative: use raw TL API if needed
+            pinned_messages = []
+            async for msg in tg.raw.iter_messages(entity, search=None):
+                if msg.pinned:
+                    pinned_messages.append(msg)
+                if len(pinned_messages) >= limit:
+                    break
+        except Exception as e:
+            log.warning("Could not fetch pinned messages: %s", e)
+            print_error(f"Could not load pinned messages: {e}")
+            return
+    
+    if not pinned_messages:
+        print_warning("No pinned messages in this chat.")
+        return
+    
+    chat_name = entity_name(entity)
+    me_id = tg.me.id if tg.me else 0
+    
+    # JSON output
+    if output_json:
+        data = [
+            {
+                "id": msg.id,
+                "date": msg.date.isoformat() if msg.date else None,
+                "sender_id": msg.sender_id,
+                "text": msg.text or "",
+                "media": type(msg.media).__name__ if msg.media else None,
+                "edit_date": msg.edit_date.isoformat() if msg.edit_date else None,
+            }
+            for msg in reversed(pinned_messages)
+        ]
+        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        return
+    
+    # Regular output
+    console.print(
+        Rule(f"[{p['accent']}]{chat_name}[/] — [bold]Pinned messages[/]", style=p["separator"])
+    )
+    
+    from telegcli.ui.theme import render_messages
+    render_messages(pinned_messages, me_id, chat_name)
+    console.print(f"[{p['dim']}]  {len(pinned_messages)} pinned message(s)[/]")
     log.info("Exported %d messages to %s", len(export_data), out_path)
 
 

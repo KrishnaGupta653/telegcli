@@ -2,7 +2,7 @@
 telegcli.commands.misc
 ────────────────────
 Commands: me, schedule, automate, template, draft, sessions,
-          theme, config, logout, clear, help
+          theme, config, logout, clear, help, shortcuts
 
 Fixes applied:
   #8  — async prompts via repl._ask()
@@ -14,6 +14,7 @@ New features:
   G — template system (save, use, list, delete)
   B — drafts system (save, list, send, delete)
   I — sessions management
+  Feature 5 — shortcuts command (keyboard shortcuts cheat sheet)
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from rich.text import Text
 from rich import box
 
 from telegcli.core.client import tg
-from telegcli.core.config import get_config
+from telegcli.core.config import get_config, DEFAULTS
 from telegcli.ui.theme import (
     get_console, print_success, print_error, print_warning,
     print_info, get_palette, refresh_console,
@@ -371,6 +372,12 @@ async def cmd_draft(args: list[str]) -> None:
         if not drafts:
             print_info("No drafts. Use: draft save <chat> <text>")
             return
+        
+        # Feature 14: Show auto-saved drafts indicator
+        auto_saved = cfg.get("auto_drafts", [])
+        if auto_saved:
+            console.print(f"[{p['info']}]Auto-saved drafts: {len(auto_saved)}[/]")
+        
         table = Table(box=box.SIMPLE, header_style=f"bold {p['accent']}")
         table.add_column("#",     style=p["dim"], width=4)
         table.add_column("Chat",  style=p["accent"])
@@ -525,7 +532,7 @@ async def cmd_theme(args: list[str]) -> None:
 # ── config ────────────────────────────────────────────────────────────────────
 
 async def cmd_config(args: list[str]) -> None:
-    """config | config <key> | config <key> <val> | config reset"""
+    """config | config <key> | config <key> <val> | config set <key> <val> | config unset <key> | config reset"""
     console = get_console()
     p = get_palette()
     cfg = get_config()
@@ -543,6 +550,41 @@ async def cmd_config(args: list[str]) -> None:
         print_success("Config reset to defaults.")
         return
 
+    if args[0] == "unset":
+        if len(args) < 2:
+            print_error("Usage: config unset <key>")
+            return
+        key = args[1]
+        if key in DEFAULTS:
+            cfg.set(key, DEFAULTS[key])
+            print_success(f"{key} reset to default ({DEFAULTS[key]!r})")
+        else:
+            print_warning(f"Unknown key '{key}'.")
+        return
+
+    if args[0] == "set":
+        if len(args) < 3:
+            print_error("Usage: config set <key> <value>")
+            return
+        key = args[1]
+        raw = " ".join(args[2:])
+        val = _parse_config_value(raw)
+        cfg.set(key, val)
+        print_success(f"{key} = {val}")
+        return
+
+    if len(args) == 1 and "=" in args[0]:
+        key, raw = args[0].split("=", 1)
+        key = key.strip()
+        raw = raw.strip()
+        if not key:
+            print_error("Usage: config <key>=<value>")
+            return
+        val = _parse_config_value(raw)
+        cfg.set(key, val)
+        print_success(f"{key} = {val}")
+        return
+
     key = args[0]
     if len(args) == 1:
         val = cfg.get(key, "<not set>")
@@ -550,17 +592,21 @@ async def cmd_config(args: list[str]) -> None:
         return
 
     raw = " ".join(args[1:])
-    if raw.lower() == "true":
-        val: object = True
-    elif raw.lower() == "false":
-        val = False
-    elif raw.lstrip("-").isdigit():
-        val = int(raw)
-    else:
-        val = raw
+    val = _parse_config_value(raw)
 
     cfg.set(key, val)
     print_success(f"{key} = {val}")
+
+
+def _parse_config_value(raw: str) -> object:
+    cleaned = raw.strip().strip('"').strip("'")
+    if cleaned.lower() == "true":
+        return True
+    if cleaned.lower() == "false":
+        return False
+    if cleaned.lstrip("-").isdigit():
+        return int(cleaned)
+    return cleaned
 
 
 # ── logout ────────────────────────────────────────────────────────────────────
@@ -644,19 +690,255 @@ async def cmd_clear(args: list[str]) -> None:
     os.system("clear" if os.name != "nt" else "cls")
 
 
+# ── shortcuts — Feature 5: Keyboard shortcuts cheat sheet ──────────────────────
+
+async def cmd_shortcuts(args: list[str]) -> None:
+    """
+    shortcuts  — show keyboard shortcuts available in telegcli REPL
+    
+    Feature 5: Keyboard shortcuts display
+    """
+    console = get_console()
+    p = get_palette()
+    
+    shortcuts = [
+        ("Tab", "Auto-complete chat names, commands, and friends"),
+        ("↑ / ↓", "Navigate command history backwards/forwards"),
+        ("Ctrl+R", "Reverse search in command history (type to search)"),
+        ("Ctrl+L", "Clear screen (same as 'clear' command)"),
+        ("Ctrl+C", "Cancel current command or exit watch/input mode"),
+        ("Ctrl+D", "Exit telegcli (same as 'quit' or 'exit')"),
+        ("\\e", "Open external editor for multi-line messages (in send prompt)"),
+    ]
+    
+    console.print(
+        Rule(f"[{p['accent']}]Keyboard Shortcuts[/]", style=p["separator"])
+    )
+    
+    table = Table(show_header=True, header_style="bold", box=box.ROUNDED)
+    table.add_column("Shortcut", style=f"{p['accent']}")
+    table.add_column("Description", style=p["fg"])
+    
+    for shortcut, description in shortcuts:
+        table.add_row(shortcut, description)
+    
+    console.print(table)
+    
+    console.print(
+        f"\n[{p['dim']}]💡 Tips:[/]"
+        f"\n  • Type [bold]help[/] for information about all commands"
+        f"\n  • Type [bold]help <command>[/] for detailed help on a command"
+        f"\n  • Use Tab extensively for auto-completion"
+        f"\n  • History is saved in ~/.config/telegcli/history\n"
+    )
+
+
+# Extended help with examples for complex commands
+HELP_DETAILS = {
+    "read": {
+        "title": "📖 Read Messages from a Chat",
+        "description": "Show messages from a specific chat. Chat can be by number, @username, or +phone.",
+        "examples": [
+            ("read 1", "Show last 10 messages from chat #1"),
+            ("read 1 50", "Show last 50 messages from chat #1"),
+            ("read @friend", "Show messages from @friend"),
+            ("read +1234567890", "Show messages from phone number"),
+        ],
+        "tips": [
+            "Use 'list' first to see chat numbers",
+            "Default is 10 messages; specify count for more",
+            "Shows sender, time, and message text",
+        ]
+    },
+    "send": {
+        "title": "✍️ Send a Message",
+        "description": "Send text message, photo, video, or file to a chat.",
+        "examples": [
+            ("send 1 Hello!", "Send simple text to chat #1"),
+            ("send @friend Hi there!", "Send to contact @friend"),
+            ("send 1 Photo: /path/to/pic.jpg", "Send photo with caption"),
+        ],
+        "tips": [
+            "Use 'list' to find chat number",
+            "Messages support markdown-style formatting",
+            "Use 'upload' for media with detailed captions",
+        ]
+    },
+    "reply": {
+        "title": "💬 Reply to a Specific Message",
+        "description": "Reply directly to a message, creating a threaded conversation.",
+        "examples": [
+            ("reply 1 42 Thanks!", "Reply to message #42 in chat #1"),
+            ("reply @chat 99 Got it", "Reply in chat @chat to message #99"),
+        ],
+        "tips": [
+            "Use 'read' to find message IDs",
+            "Replying creates a thread shown in 'thread' command",
+            "Your reply links to the original message",
+        ]
+    },
+    "bot": {
+        "title": "🤖 Bot Service Manager",
+        "description": "Create, configure, and manage Telegram bots using Bot API tokens.",
+        "examples": [
+            ("bot profiles", "List all saved bot tokens"),
+            ("bot add mybot 123:ABCdef", "Save a new bot token"),
+            ("bot use mybot", "Switch to bot profile 'mybot'"),
+            ("bot start", "Start receiving messages (polling/webhook)"),
+            ("bot stop", "Stop receiving messages"),
+            ("bot status", "Check if bot is running"),
+            ("bot create", "Create NEW bot via BotFather (interactive)"),
+            ("bot doctor mybot", "Check if bot token works + can send messages"),
+        ],
+        "tips": [
+            "Get Bot API token from @BotFather on Telegram",
+            "Use 'bot create' to create bot without leaving telegcli",
+            "Use 'bot doctor' to diagnose connection problems",
+            "Bot mode uses different token (not your account)",
+            "Poll = check for messages every 25s (simple, free)",
+            "Webhook = receive real-time updates (fast, needs URL)",
+        ]
+    },
+    "schedule": {
+        "title": "⏰ Schedule a Message",
+        "description": "Send message at specific date/time (scheduled for future delivery).",
+        "examples": [
+            ("schedule 1 2025-12-25 Merry Christmas!", "Send Dec 25 at 00:00"),
+            ("schedule @friend 2025-12-31 09:00 Happy New Year!", "Send to contact on Dec 31 at 9am"),
+        ],
+        "tips": [
+            "Date format: YYYY-MM-DD [HH:MM]",
+            "If no time given, sends at 00:00 (midnight)",
+            "Telegram will deliver at exact scheduled time",
+        ]
+    },
+    "automate": {
+        "title": "🤖 Auto-Reply Rules",
+        "description": "Create automatic responses to specific message triggers.",
+        "examples": [
+            ("automate list", "Show all active auto-reply rules"),
+            ("automate add BRB Away right now!", "When someone sends 'BRB', reply 'Away right now!'"),
+            ("automate add hello Hi there! --private", "Reply only in private DMs, not groups"),
+        ],
+        "tips": [
+            "Trigger is case-insensitive partial match",
+            "Use --limit N to limit replies per hour (e.g., --limit 5)",
+            "Use --private to only reply in DMs",
+            "Reply happens automatically when trigger text appears",
+        ]
+    },
+    "export": {
+        "title": "💾 Export Chat Messages",
+        "description": "Save messages from a chat as JSON, CSV, or HTML file.",
+        "examples": [
+            ("export 1 100", "Export 100 messages from chat #1 as JSON"),
+            ("export 1 500 --format csv", "Export as CSV file"),
+            ("export @work 200 --format html", "Export from @work team as HTML"),
+        ],
+        "tips": [
+            "Default format is JSON (easiest to process)",
+            "CSV format works with Excel/Sheets",
+            "HTML format creates readable archive",
+            "Includes sender, time, media links",
+        ]
+    },
+    "watch": {
+        "title": "📡 Live Message Stream",
+        "description": "Monitor and display new messages as they arrive in real-time.",
+        "examples": [
+            ("watch", "Show all new messages across all chats"),
+            ("watch @channel", "Show only new messages from @channel"),
+            ("watch 1", "Monitor chat #1 live"),
+        ],
+        "tips": [
+            "Exit with Ctrl+C",
+            "Shows sender, time, and full text",
+            "Great for monitoring important groups/channels",
+        ]
+    },
+    "preview": {
+        "title": "🖼️ Show Image as ASCII Art",
+        "description": "Display image or photo as colored ASCII text in terminal.",
+        "examples": [
+            ("preview 1 42", "Show message #42's image from chat #1"),
+        ],
+        "tips": [
+            "Works with photos, screenshots, diagrams",
+            "Uses colored characters to recreate image",
+            "Limited detail due to terminal size",
+        ]
+    },
+    "template": {
+        "title": "🔖 Message Templates",
+        "description": "Save and reuse frequently-used message text.",
+        "examples": [
+            ("template save greet Hi there! How are you?", "Save as 'greet'"),
+            ("template use greet", "Send saved template to chat"),
+            ("template list", "Show all saved templates"),
+        ],
+        "tips": [
+            "Great for common replies (greetings, status updates)",
+            "Templates reduce typing, ensure consistency",
+            "Combine with 'send' or 'reply'",
+        ]
+    },
+    "automate": {
+        "title": "🤖 Automation Rules",
+        "description": "Create auto-replies, scheduled messages, and workflow rules.",
+        "examples": [
+            ("automate add busy Busy right now --private --limit 3", "Auto-reply 'Busy' max 3x/hour in DMs"),
+        ],
+        "tips": [
+            "Trigger is text that triggers the auto-reply",
+            "Use --limit N to prevent spam (replies per hour)",
+            "--private: only in direct messages",
+            "--chat @x: only in specific chat",
+            "--user @x: only from specific user",
+        ]
+    },
+}
+
+
 async def cmd_help(args: list[str]) -> None:
     console = get_console()
     p = get_palette()
 
     if args:
         cmd = args[0].lower()
+        
+        # Check for extended help details
+        if cmd in HELP_DETAILS:
+            details = HELP_DETAILS[cmd]
+            
+            # Title + Description
+            console.print(f"\n[bold {p['accent']}]{details['title']}[/]")
+            console.print(f"[{p['dim']}]{details['description']}[/]\n")
+            
+            # Examples
+            if details.get("examples"):
+                console.print(f"[bold {p['accent2']}]Examples:[/]")
+                for example_cmd, explanation in details["examples"]:
+                    console.print(f"  [cyan]> {example_cmd}[/]")
+                    console.print(f"    {explanation}")
+                console.print()
+            
+            # Tips
+            if details.get("tips"):
+                console.print(f"[bold {p['accent2']}]Tips:[/]")
+                for tip in details["tips"]:
+                    console.print(f"  • {tip}")
+                console.print()
+            return
+        
+        # Fallback to basic description
         desc = COMMANDS.get(cmd)
         if desc:
-            console.print(f"[{p['accent']}]{cmd}[/]  [{p['dim']}]{desc}[/]")
+            console.print(f"\n[{p['accent']}]{cmd}[/]  [{p['dim']}]{desc}[/]\n")
         else:
             print_warning(f"Unknown command: {cmd}")
         return
 
+    # Full help table
     table = Table(
         box=box.SIMPLE, show_header=True,
         header_style=f"bold {p['accent']}", padding=(0, 2),
@@ -665,21 +947,22 @@ async def cmd_help(args: list[str]) -> None:
     table.add_column("Description", style=p["fg"])
 
     groups = {
-        "Messages":   ["read", "send", "reply", "edit", "delete", "forward",
-                       "react", "pin", "unpin", "copy", "thread"],
-        "Chats":      ["list", "info", "search", "gsearch", "mute", "unmute",
-                       "archive", "markread"],
-        "Files":      ["upload", "download", "gallery"],
-        "Live":       ["watch"],
-        "Contacts":   ["contacts", "add", "block", "unblock"],
-        "Analysis":   ["stats", "export"],
-        "Productivity": ["schedule", "template", "draft", "automate"],
-        "Sessions":   ["sessions"],
-        "Utility":    ["me", "theme", "config", "logout", "clear", "help", "quit"],
+        "📨 Messages":   ["read", "send", "reply", "edit", "delete", "forward",
+                         "react", "pin", "unpin", "copy", "thread", "preview"],
+        "💬 Chats":      ["list", "info", "search", "gsearch", "mute", "unmute",
+                         "archive", "markread"],
+        "📁 Files":      ["upload", "download", "gallery"],
+        "🔴 Live":       ["watch"],
+        "👥 Contacts":   ["contacts", "add", "block", "unblock"],
+        "📊 Analysis":   ["stats", "export"],
+        "⏰ Productivity": ["schedule", "template", "draft", "automate"],
+        "🔀 Sessions":   ["sessions"],
+        "🤖 Bots":       ["bot"],
+        "⚙️ Utility":    ["me", "theme", "config", "logout", "clear", "help", "quit"],
     }
 
     for group, cmds in groups.items():
-        table.add_row(f"[bold {p['accent2']}]── {group} ──[/]", "")
+        table.add_row(f"[bold {p['accent2']}]{group}[/]", "")
         for cmd in cmds:
             desc = COMMANDS.get(cmd, "")
             table.add_row(f"  {cmd}", desc)
@@ -687,10 +970,10 @@ async def cmd_help(args: list[str]) -> None:
     console.print(Rule(f"[{p['accent']}]telegcli commands[/]", style=p["separator"]))
     console.print(table)
     console.print(
-        f"\n  [{p['dim']}]Tab[/]  autocomplete  ·  "
+        f"\n  [bold {p['accent2']}]Tips:[/]\n"
+        f"  [{p['dim']}]help <command>[/]  Get detailed help with examples\n"
+        f"  [{p['dim']}]Tab[/]  autocomplete  ·  "
         f"[{p['dim']}]↑↓[/]  history  ·  "
-        f"[{p['dim']}]Ctrl+C[/]  interrupt  ·  "
-        f"[{p['dim']}]Ctrl+L[/]  clear screen\n"
-        f"  [{p['dim']}]read --json[/]  machine-readable output  ·  "
-        f"[{p['dim']}]stats --json[/]  JSON stats\n"
+        f"[{p['dim']}]Ctrl+C[/]  interrupt\n"
+        f"  [{p['dim']}]--json[/]  Most commands support JSON output (read, stats, export)\n"
     )

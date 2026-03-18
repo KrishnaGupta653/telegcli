@@ -84,6 +84,13 @@ async def resolve_entity(identifier: str) -> Optional[Any]:
         if entity:
             tg.cache_entity(entity)  # fix #13
             return entity
+        # Help user if dialog cache is empty
+        if not dialog_cache._dialogs:
+            print_error(
+                "No cached dialogs. Run [bold]list[/] first to load chats, "
+                "or use @username / phone number directly."
+            )
+            return None
 
     # 2. Try client entity cache first — avoids network round-trip (fix #13)
     if identifier.lstrip("-").isdigit():

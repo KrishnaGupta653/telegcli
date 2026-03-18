@@ -16,7 +16,7 @@ from telethon.errors import (
     BadRequestError,
 )
 
-from telegcli.core.rate_limiter import rate_limited, MAX_RETRIES
+from telegcli.core.rate_limiter import rate_limited
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

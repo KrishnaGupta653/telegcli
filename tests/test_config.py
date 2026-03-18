@@ -116,6 +116,17 @@ def test_validate_negative_api_id_clamped():
     assert result["api_id"] == 0
 
 
+def test_validate_image_preview_bounds_and_types():
+    data = {
+        **DEFAULTS,
+        "image_preview_width": "500",
+        "image_preview_max": "-3",
+    }
+    result = _validate(data)
+    assert result["image_preview_width"] == 120
+    assert result["image_preview_max"] == 0
+
+
 # ── Config class ──────────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -198,6 +209,13 @@ def test_config_dump_hides_api_hash(tmp_path):
     cfg.set("api_hash", "supersecret")
     dumped = json.loads(cfg.dump())
     assert "api_hash" not in dumped
+
+
+def test_config_dump_masks_bot_tokens(tmp_path):
+    cfg = Config(config_dir=tmp_path)
+    cfg.set("bot_profiles", [{"name": "demo", "token": "123:abc", "mode": "polling"}])
+    dumped = json.loads(cfg.dump())
+    assert dumped["bot_profiles"][0]["token"] == "***"
 
 
 def test_config_keybinds_deep_merge(tmp_path):

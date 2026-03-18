@@ -36,6 +36,11 @@ from telegcli.core.rate_limiter import rate_limited
 log = logging.getLogger("telegcli.client")
 
 
+def _is_invalid_api_credentials_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "api_id/api_hash combination is invalid" in msg
+
+
 class teleclient:
     """
     High-level Telegram client.  All Telethon access goes through here.
@@ -78,14 +83,60 @@ class teleclient:
     async def ensure_authorized(self, ui_callbacks: dict) -> bool:
         """
         Ensure client is authorized.
-        ui_callbacks: get_phone, get_code, get_2fa, show_error  (all async callables)
+        ui_callbacks: get_phone, get_code, get_2fa, show_error,
+        optional: choose_login_method, show_qr (all async callables)
         """
         if await self._client.is_user_authorized():
             self._me = await self._client.get_me()
             return True
 
+        login_method = "phone"
+        choose_login_method = ui_callbacks.get("choose_login_method")
+        if choose_login_method:
+            try:
+                selected = await choose_login_method()
+                if selected in {"phone", "qr"}:
+                    login_method = selected
+            except Exception as e:
+                log.exception("Failed to read login method; falling back to phone auth")
+                show_error = ui_callbacks.get("show_error")
+                if show_error:
+                    await show_error(f"Could not open login chooser: {e}. Falling back to phone login.")
+
+        if login_method == "qr":
+            ok = await self._authorize_with_qr(ui_callbacks)
+            if ok is None:
+                return False
+            if ok:
+                self._me = await self._client.get_me()
+                log.info("Authorized with QR as %s (id=%s)", self._me.first_name, self._me.id)
+                return True
+
+            show_error = ui_callbacks.get("show_error")
+            if show_error:
+                await show_error("QR login failed or timed out. Falling back to OTP login.")
+
+        ok = await self._authorize_with_phone(ui_callbacks)
+        if not ok:
+            return False
+
+        self._me = await self._client.get_me()
+        log.info("Authorized as %s (id=%s)", self._me.first_name, self._me.id)
+        return True
+
+    async def _authorize_with_phone(self, ui_callbacks: dict) -> bool:
+        """Classic phone/OTP login with optional 2FA."""
+        show_error = ui_callbacks["show_error"]
+
         phone = await ui_callbacks["get_phone"]()
-        await self._client.send_code_request(phone)
+        try:
+            await self._client.send_code_request(phone)
+        except Exception as e:
+            if _is_invalid_api_credentials_error(e):
+                await show_error("Invalid api_id/api_hash. Update Telegram API credentials and try again.")
+                return False
+            await show_error(f"Could not request login code: {e}")
+            return False
 
         for attempt in range(3):
             try:
@@ -93,7 +144,7 @@ class teleclient:
                 await self._client.sign_in(phone, code)
                 break
             except PhoneCodeInvalidError:
-                await ui_callbacks["show_error"]("Invalid code. Try again.")
+                await show_error("Invalid code. Try again.")
                 if attempt == 2:
                     return False
             except SessionPasswordNeededError:
@@ -101,12 +152,55 @@ class teleclient:
                 await self._client.sign_in(password=password)
                 break
             except FloodWaitError as e:
-                await ui_callbacks["show_error"](f"Flood wait: {e.seconds}s")
+                await show_error(f"Flood wait: {e.seconds}s")
+                return False
+            except Exception as e:
+                await show_error(f"Login failed: {e}")
                 return False
 
-        self._me = await self._client.get_me()
-        log.info("Authorized as %s (id=%s)", self._me.first_name, self._me.id)
         return True
+
+    async def _authorize_with_qr(self, ui_callbacks: dict) -> bool | None:
+        """QR login flow using Telegram app scan."""
+        show_error = ui_callbacks["show_error"]
+
+        try:
+            qr_login = await self._client.qr_login()
+        except Exception as e:
+            if _is_invalid_api_credentials_error(e):
+                await show_error("Invalid api_id/api_hash. Update Telegram API credentials and restart login.")
+                return None
+            await show_error(f"Could not initialize QR login: {e}")
+            return False
+
+        show_qr = ui_callbacks.get("show_qr")
+        if show_qr:
+            try:
+                await show_qr(qr_login.url)
+            except Exception as e:
+                await show_error(f"Could not display QR in terminal: {e}. Use this URL in Telegram instead:")
+                await show_error(qr_login.url)
+
+        try:
+            await qr_login.wait(timeout=120)
+            return True
+        except asyncio.TimeoutError:
+            await show_error("QR login timed out. Please try again.")
+            return False
+        except SessionPasswordNeededError:
+            try:
+                password = await ui_callbacks["get_2fa"]()
+                await self._client.sign_in(password=password)
+                return True
+            except Exception as e:
+                await show_error(f"2FA login after QR failed: {e}")
+                return False
+        except FloodWaitError as e:
+            await show_error(f"Flood wait: {e.seconds}s")
+            return False
+        except Exception as e:
+            await show_error(f"QR login failed: {e}")
+            return False
 
     async def disconnect(self) -> None:
         if self._client:

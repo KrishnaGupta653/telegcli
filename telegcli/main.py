@@ -7,6 +7,14 @@ from __future__ import annotations
 
 import sys
 import asyncio
+from pathlib import Path
+
+# When this file is executed directly (python telegcli/main.py), ensure
+# absolute imports resolve to the workspace package, not a globally installed one.
+if __package__ in (None, ""):
+    _project_root = Path(__file__).resolve().parents[1]
+    if str(_project_root) not in sys.path:
+        sys.path.insert(0, str(_project_root))
 
 if sys.version_info < (3, 9):
     print("telegcli requires Python 3.9 or higher.")

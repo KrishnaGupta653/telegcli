@@ -8,6 +8,18 @@ pillow>=10.0.0
 python-magic>=0.4.27
 pyperclip>=1.8.2
 pydantic>=2.5.0
+qrcode>=7.4.2
+httpx>=0.27.0
+
+# Optional dependencies for Phase 2 features
+# Webhook mode support (for bot service):
+# aiohttp>=3.9.0
+# 
+# ngrok tunneling for local webhook testing:
+# pyngrok>=5.2.0
+#
+# Install optional features with:
+# pip install telegcli[webhook,ngrok]
 
 # Development / testing (optional)
 # pytest>=7.4.0

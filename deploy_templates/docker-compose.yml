@@ -1,0 +1,127 @@
+version: '3.9'
+
+services:
+  # ════════════════════════════════════════════════════════════════════════
+  # telegcli-bot: Main bot service with polling or webhook
+  # ════════════════════════════════════════════════════════════════════════
+  telegcli-bot:
+    build:
+      context: .
+      dockerfile: deploy_templates/Dockerfile
+    
+    container_name: telegcli-bot
+    
+    # Environment variables
+    environment:
+      BOT_PROFILE: ${BOT_PROFILE:-default}
+      BOT_MODE: ${BOT_MODE:-polling}
+      BOT_TOKEN: ${BOT_TOKEN}
+      LOG_LEVEL: INFO
+      TELEGCLI_CONFIG_DIR: /bot/config
+    
+    # Volumes for persistent configuration and logs
+    volumes:
+      - telegcli-config:/bot/config
+      - telegcli-logs:/bot/logs
+    
+    # Ports (if webhook mode)
+    ports:
+      - "${WEBHOOK_PORT:-5000}:5000"
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Network
+    networks:
+      - bot-network
+
+  # ════════════════════════════════════════════════════════════════════════
+  # nginx-reverse-proxy: Optional reverse proxy for webhook mode
+  # ════════════════════════════════════════════════════════════════════════
+  nginx:
+    image: nginx:latest
+    container_name: telegcli-nginx
+    
+    # Configuration
+    volumes:
+      - ./deploy_templates/nginx.conf:/etc/nginx/nginx.conf:ro
+      - telegcli-nginx-cache:/var/cache/nginx
+    
+    # Ports
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    
+    # Dependencies
+    depends_on:
+      - telegcli-bot
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Network
+    networks:
+      - bot-network
+    
+    # Only start if webhook mode is enabled
+    profiles:
+      - webhook
+
+volumes:
+  telegcli-config:
+    driver: local
+  telegcli-logs:
+    driver: local
+  telegcli-nginx-cache:
+    driver: local
+
+networks:
+  bot-network:
+    driver: bridge
+
+# ════════════════════════════════════════════════════════════════════════════
+# Usage:
+# 
+# Polling mode (default):
+#   BOT_PROFILE=my_bot docker-compose up -d
+#
+# Webhook mode:
+#   BOT_PROFILE=my_bot BOT_MODE=webhook --profile webhook docker-compose up -d
+#
+# Show logs:
+#   docker-compose logs -f telegcli-bot
+#
+# Stop service:
+#   docker-compose down
+#
+# Rebuild image:
+#   docker-compose build --no-cache
+#
+# Run bot doctor:
+#   docker-compose exec telegcli-bot bot doctor my_bot
+# ════════════════════════════════════════════════════════════════════════════
