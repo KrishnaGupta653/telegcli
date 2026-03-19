@@ -7,15 +7,15 @@ fully async, and built for daily use.
 
 ## What's new in v3.0
 
-| Area                   | Feature                                                                                                  |
-| ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| **Auto-save drafts**   | REPL input buffer auto-saved every 30s — recover unsent messages on restart                              |
-| **Link preview**       | Chat list displays extracted URLs from messages for quick reference                                      |
-| **Enhanced chat info** | `info` command now shows member count, admin count, description, and pinned message ID                   |
-| **Global REPL prompt** | Async input accessible to all commands for real-time prompting during watch/forward operations           |
-| **Improved help**      | Context-aware help with examples and tips for each command                                               |
-| **Syntax validation**  | All Python files syntax-checked; production-ready for PyPI                                               |
-| **Comprehensive tests**| 97 pytest tests covering commands, config, automations, resolver, theme rendering                        |
+| Area                    | Feature                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| **Auto-save drafts**    | REPL input buffer auto-saved every 30s — recover unsent messages on restart                    |
+| **Link preview**        | Chat list displays extracted URLs from messages for quick reference                            |
+| **Enhanced chat info**  | `info` command now shows member count, admin count, description, and pinned message ID         |
+| **Global REPL prompt**  | Async input accessible to all commands for real-time prompting during watch/forward operations |
+| **Improved help**       | Context-aware help with examples and tips for each command                                     |
+| **Syntax validation**   | All Python files syntax-checked; production-ready for PyPI                                     |
+| **Comprehensive tests** | 97 pytest tests covering commands, config, automations, resolver, theme rendering              |
 
 ---
 
@@ -40,50 +40,50 @@ fully async, and built for daily use.
 
 ### All available commands
 
-| Command                                | Description                                     |
-| -------------------------------------- | ----------------------------------------------- |
-| `list [n]`                             | List last n chats (30 default)                  |
-| `list --preview`                       | Show chat list with extracted link previews     |
-| `read <chat> [n]`                      | Show last n messages (50 default)               |
-| `read --first-unread`                  | Jump to first unread message                    |
-| `read --type photo\|video\|document`   | Filter messages by type                         |
-| `read --json`                          | Machine-readable message output (pipe to `jq`)  |
-| `send <chat> <text>`                   | Send message                                    |
-| `reply <chat> <msg_id> <text>`         | Reply to message                                |
-| `edit <chat> <msg_id> <text>`          | Edit message                                    |
-| `delete <chat> <msg_id>`               | Delete message everywhere                       |
-| `forward <chat> <id1,id2,...> <to>`    | Bulk forward with optional caption edit         |
-| `copy <chat> <msg_id>`                 | Copy message text to system clipboard           |
-| `thread <chat> <msg_id>`               | Show a message and all its replies              |
-| `preview <chat> <msg_id>`              | Show ASCII preview for image message            |
-| `react <chat> <msg_id> <emoji>`        | React to message                                |
-| `gallery <chat> [n]`                   | List all media in a chat (type, name, size, ID) |
-| `upload <chat> <file>`                 | Upload a file                                   |
-| `download <chat> <msg_id>`             | Download media from message                     |
-| `pins <chat> [n]`                      | Browse pinned messages                          |
-| `pin <chat> <msg_id>`                  | Pin a message                                   |
-| `unpin <chat> <msg_id>`                | Unpin a message                                 |
-| `info <chat>`                          | Show chat/user details (now with member count)  |
-| `template save/use/list/delete`        | Save and reuse frequently sent messages         |
+| Command                                | Description                                         |
+| -------------------------------------- | --------------------------------------------------- |
+| `list [n]`                             | List last n chats (30 default)                      |
+| `list --preview`                       | Show chat list with extracted link previews         |
+| `read <chat> [n]`                      | Show last n messages (50 default)                   |
+| `read --first-unread`                  | Jump to first unread message                        |
+| `read --type photo\|video\|document`   | Filter messages by type                             |
+| `read --json`                          | Machine-readable message output (pipe to `jq`)      |
+| `send <chat> <text>`                   | Send message                                        |
+| `reply <chat> <msg_id> <text>`         | Reply to message                                    |
+| `edit <chat> <msg_id> <text>`          | Edit message                                        |
+| `delete <chat> <msg_id>`               | Delete message everywhere                           |
+| `forward <chat> <id1,id2,...> <to>`    | Bulk forward with optional caption edit             |
+| `copy <chat> <msg_id>`                 | Copy message text to system clipboard               |
+| `thread <chat> <msg_id>`               | Show a message and all its replies                  |
+| `preview <chat> <msg_id>`              | Show ASCII preview for image message                |
+| `react <chat> <msg_id> <emoji>`        | React to message                                    |
+| `gallery <chat> [n]`                   | List all media in a chat (type, name, size, ID)     |
+| `upload <chat> <file>`                 | Upload a file                                       |
+| `download <chat> <msg_id>`             | Download media from message                         |
+| `pins <chat> [n]`                      | Browse pinned messages                              |
+| `pin <chat> <msg_id>`                  | Pin a message                                       |
+| `unpin <chat> <msg_id>`                | Unpin a message                                     |
+| `info <chat>`                          | Show chat/user details (now with member count)      |
+| `template save/use/list/delete`        | Save and reuse frequently sent messages             |
 | `draft save/list/send/delete`          | Preserve unfinished messages (auto-saves every 30s) |
-| `export --format csv\|txt\|html\|json` | Multiple export formats                         |
-| `export --all`                         | Export full chat history                        |
-| `stats <chat> [limit]`                 | Message statistics with daily/hourly breakdown  |
-| `watch [--out]`                        | Stream all incoming messages                    |
-| `scheduled`                            | List scheduled messages                         |
-| `cancel-scheduled <id>`                | Cancel a scheduled message                      |
-| `reactions <msg_id>`                   | Show who reacted to a message                   |
-| `theme [name]`                         | Switch theme or preview themes                  |
-| `automate add/remove/list`             | Advanced automation rules                       |
-| `sessions list/switch/add`             | Manage multiple Telegram accounts               |
-| `backup/restore`                       | Data backup and recovery                        |
-| `tag add/remove/list`                  | Chat tagging and organization                   |
-| `group create/add/list`                | Chat grouping                                   |
-| `workflow create/run/list`             | Advanced automation workflows                   |
-| `bot add/use/start/status/scaffold`    | Bot API token management and plugin routing     |
-| `config [key] [value]`                 | View or modify configuration                    |
-| `shortcuts`                            | Display all keyboard shortcuts                  |
-| `help [command]`                       | Show all commands or help for one              |
+| `export --format csv\|txt\|html\|json` | Multiple export formats                             |
+| `export --all`                         | Export full chat history                            |
+| `stats <chat> [limit]`                 | Message statistics with daily/hourly breakdown      |
+| `watch [--out]`                        | Stream all incoming messages                        |
+| `scheduled`                            | List scheduled messages                             |
+| `cancel-scheduled <id>`                | Cancel a scheduled message                          |
+| `reactions <msg_id>`                   | Show who reacted to a message                       |
+| `theme [name]`                         | Switch theme or preview themes                      |
+| `automate add/remove/list`             | Advanced automation rules                           |
+| `sessions list/switch/add`             | Manage multiple Telegram accounts                   |
+| `backup/restore`                       | Data backup and recovery                            |
+| `tag add/remove/list`                  | Chat tagging and organization                       |
+| `group create/add/list`                | Chat grouping                                       |
+| `workflow create/run/list`             | Advanced automation workflows                       |
+| `bot add/use/start/status/scaffold`    | Bot API token management and plugin routing         |
+| `config [key] [value]`                 | View or modify configuration                        |
+| `shortcuts`                            | Display all keyboard shortcuts                      |
+| `help [command]`                       | Show all commands or help for one                   |
 
 ---
 
