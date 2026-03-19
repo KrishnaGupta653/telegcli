@@ -934,6 +934,15 @@ async def cmd_help(args: list[str]) -> None:
         desc = COMMANDS.get(cmd)
         if desc:
             console.print(f"\n[{p['accent']}]{cmd}[/]  [{p['dim']}]{desc}[/]\n")
+            
+            # Feature 17: Context-aware suggestions
+            from telegcli.commands.advanced_features import cmd_help_context
+            suggestions = await cmd_help_context(cmd)
+            if suggestions:
+                console.print(f"[{p['accent2']}]Helpful tips:[/]")
+                for sugg in suggestions:
+                    console.print(f"  [{p['dim']}]💡 {sugg}[/]")
+                console.print()
         else:
             print_warning(f"Unknown command: {cmd}")
         return

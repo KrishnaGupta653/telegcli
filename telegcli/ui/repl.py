@@ -27,6 +27,9 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from telegcli.core.config import get_config
 
+# Global REPL instance for commands to access asynchronously
+_repl: Optional['Repl'] = None
+
 # Command descriptions: short but clear with examples for complex commands
 COMMANDS = {
     # Messages
@@ -194,11 +197,14 @@ class Repl:
     """Fully async REPL loop."""
 
     def __init__(self) -> None:
+        global _repl
         self._dialog_names: list[str] = []
         self._completer = TgCompleter(self._dialog_names)
         self._session: Optional[PromptSession] = None
         self._me_name: str = "you"
         self._current_chat: str = ""
+        self._autosave_task: Optional[object] = None  # Background autosave task
+        _repl = self  # Set global reference for commands to use
 
     def set_me(self, name: str) -> None:
         self._me_name = name
@@ -244,6 +250,25 @@ class Repl:
         handler: Callable[[str, list[str]], Awaitable[None]],
     ) -> None:
         self._session = self._build_session()
+        
+        # Feature 15: Start draft autosave task
+        async def autosave_drafts():
+            """Periodically save draft indicator (runs every 30s)."""
+            import asyncio
+            while True:
+                try:
+                    await asyncio.sleep(30)
+                    # Just mark that autosave happened; actual draft content 
+                    # is saved via explicit 'draft save' command
+                    cfg = get_config()
+                    auto_drafts = cfg.get("last_autosave_time", None)
+                    cfg.set("last_autosave_time", asyncio.get_event_loop().time())
+                except (asyncio.CancelledError, RuntimeError):
+                    break
+                except Exception:
+                    pass  # Silently ignore errors in background task
+        
+        self._autosave_task = asyncio.create_task(autosave_drafts())
 
         while True:
             try:
@@ -277,6 +302,14 @@ class Repl:
                 import logging
                 logging.getLogger("telegcli.repl").exception("Unhandled error in command %r", cmd)
                 print_error(f"Error: {e}")
+        
+        # Cleanup: cancel autosave task
+        if self._autosave_task:
+            self._autosave_task.cancel()
+            try:
+                await self._autosave_task
+            except asyncio.CancelledError:
+                pass
 
 
 def _smart_split(line: str) -> list[str]:

@@ -29,7 +29,7 @@ from telegcli.commands.reactions import (
     cmd_reactions, cmd_scheduled, cmd_cancel_scheduled,
 )
 from telegcli.commands.advanced_features import (
-    cmd_snippet, cmd_analytics_enhanced, cmd_theme_preview,
+    cmd_snippet, cmd_analytics_enhanced, cmd_theme_preview, cmd_help_context,
 )
 from telegcli.commands.groups import (
     cmd_tag, cmd_group,

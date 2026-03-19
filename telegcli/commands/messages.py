@@ -39,6 +39,7 @@ from telegcli.utils.editor import open_editor
 log = logging.getLogger("telegcli.messages")
 
 # Injected by app.py so commands can prompt the user asynchronously (fix #8)
+# Note: This is for backwards compatibility; new code should use _repl from telegcli.ui.repl
 _repl: Optional[object] = None
 
 
@@ -549,12 +550,10 @@ async def cmd_forward(args: list[str]) -> None:
             old_caption = msg.text or "(no caption)"
             console.print(f"[{p['info']}]Current caption: {old_caption}[/]")
             
-            # Edit caption
-            from telegcli.ui.repl import _repl
+            # Edit caption via _ask helper (already properly imported)
             try:
-                new_caption = await _repl.prompt_async(
-                    "[{p['accent']}]New caption (or leave blank to keep)[/]: ",
-                    default=msg.text or ""
+                new_caption = await _ask(
+                    "[{p['accent']}]New caption (or leave blank to keep)[/]:"
                 )
                 if new_caption:
                     # Forward and edit the forwarded message

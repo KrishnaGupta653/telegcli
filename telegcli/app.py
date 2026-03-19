@@ -18,6 +18,7 @@ import io
 import logging
 import re
 import sys
+from datetime import datetime
 from typing import Optional
 
 from rich.markup import escape
@@ -42,6 +43,7 @@ class TeleCli:
         self._cfg = cfg or get_config()
         self._tg  = get_client()
         self._repl = Repl()
+        self._autosave_task: Optional[asyncio.Task] = None
 
     # ── public entry point ────────────────────────────────────────────
 
@@ -126,7 +128,10 @@ class TeleCli:
         # Step 6: start automation engine
         automation_engine.start()
 
-        # Step 7: set REPL context
+        # Step 7: start auto-save drafts background task (Feature 14)
+        self._autosave_task = asyncio.create_task(self._auto_save_drafts())
+
+        # Step 8: set REPL context
         me_name = f"@{me.username}" if me.username else (me.first_name or "me")
         session_name = self._cfg.get("session_name", "telegcli")
         if session_name != "telegcli":
@@ -139,10 +144,18 @@ class TeleCli:
             f"Tab completes. ↑↓ for history.[/]\n"
         )
 
-        # Step 8: REPL loop
+        # Step 9: REPL loop
         try:
             await self._repl.run(self._dispatch)
         finally:
+            # Cancel auto-save task
+            if self._autosave_task and not self._autosave_task.done():
+                self._autosave_task.cancel()
+                try:
+                    await self._autosave_task
+                except asyncio.CancelledError:
+                    pass
+            
             automation_engine.stop()
             try:
                 from telegcli.bot.manager import get_bot_manager
@@ -177,6 +190,46 @@ class TeleCli:
             log.warning("Pending session cleanup incomplete: %s", failed)
         elif removed:
             log.info("Deferred session cleanup completed (%d files)", removed)
+
+    # ── auto-save drafts background task ──────────────────────────────
+
+    async def _auto_save_drafts(self) -> None:
+        """
+        Feature 14: Auto-save REPL input buffer as draft every 30 seconds.
+        Allows recovery of unsent messages in case of crash or disconnect.
+        """
+        try:
+            while True:
+                await asyncio.sleep(30)  # Save every 30 seconds
+                
+                try:
+                    # Get current REPL input buffer
+                    current_input = self._repl.session.app.current_buffer.text.strip()
+                    
+                    if current_input:
+                        # Store as auto-draft
+                        auto_drafts = self._cfg.get("auto_drafts", [])
+                        
+                        # Replace previous auto-draft with latest
+                        auto_drafts = [
+                            d for d in auto_drafts
+                            if d.get("type") != "auto"
+                        ]
+                        
+                        auto_drafts.append({
+                            "type": "auto",
+                            "text": current_input,
+                            "saved_at": datetime.now().isoformat(),
+                        })
+                        
+                        self._cfg.set("auto_drafts", auto_drafts)
+                        log.debug("Auto-saved draft (%d chars)", len(current_input))
+                except Exception:
+                    # Don't crash if auto-save fails
+                    log.debug("Auto-save draft failed", exc_info=True)
+        except asyncio.CancelledError:
+            # Task was cancelled (app shutting down)
+            pass
 
     # ── command dispatcher ────────────────────────────────────────────
 

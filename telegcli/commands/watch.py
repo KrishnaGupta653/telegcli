@@ -22,6 +22,7 @@ from telegcli.ui.theme import (
     get_console, get_palette, entity_name, format_ts,
 )
 from telegcli.utils.resolver import resolve_entity
+from telegcli.ui.repl import _repl
 
 log = logging.getLogger("telegcli.watch")
 
@@ -117,15 +118,15 @@ async def cmd_watch(args: list[str]) -> None:
     try:
         # Fix #6: proper event-driven stop, not magic sleep
         # Feature 6: Support quick reply while watching
-        from telegcli.ui.repl import _repl
-        
         async def input_handler():
             """Handle user commands while watching"""
+            if not _repl:
+                return  # REPL not available, skip input handler
+            
             while True:
                 try:
                     user_input = await _repl.prompt_async(
                         "[{p['dim']}]commands: r <text> (reply), s <text> (send), q (quit)[/] > ",
-                        completer=None
                     )
                     if not user_input:
                         continue

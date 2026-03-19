@@ -191,7 +191,7 @@ def render_dialog_list(dialogs: list, selected: int = 0) -> Table:
     table.add_column("#",    style=p["dim"],       width=4,  no_wrap=True)
     table.add_column("",     width=2,              no_wrap=True)
     table.add_column("Name", style=p["fg"],        ratio=3,  no_wrap=True)
-    table.add_column("Last message", ratio=4,      no_wrap=True)
+    table.add_column("Last message",               no_wrap=False)
     table.add_column("Time", style=p["timestamp"], width=10, no_wrap=True)
     table.add_column("",     width=4,              no_wrap=True)
 
@@ -200,12 +200,22 @@ def render_dialog_list(dialogs: list, selected: int = 0) -> Table:
         name     = dialog.name or "(unnamed)"
         ts       = format_ts(dialog.date)
         last_msg = ""
+        
+        # Show last message + link preview if available
         if dialog.message:
             msg = dialog.message
             if msg.text:
                 last_msg = msg.text[:60].replace("\n", " ")
             elif msg.media:
                 last_msg = "[media]"
+        
+        # Feature 16: Add link preview URL if available
+        if hasattr(dialog, 'link_preview') and dialog.link_preview:
+            if last_msg:
+                last_msg += f"\n{Text(dialog.link_preview, style=f'dim italic')}"
+            else:
+                last_msg = Text(dialog.link_preview, style=f'dim italic')
+        
         unread = (
             f"[{p['unread']}]{dialog.unread_count}[/]"
             if dialog.unread_count else ""
@@ -216,7 +226,7 @@ def render_dialog_list(dialogs: list, selected: int = 0) -> Table:
             name_styled.stylize(f"bold {p['fg']}")
         table.add_row(
             str(i + 1), icon, name_styled,
-            Text(last_msg, style=p["dim"]),
+            Text(last_msg) if isinstance(last_msg, str) else last_msg,
             ts, unread,
             style=row_style,
         )
@@ -327,10 +337,44 @@ def _render_single_message(
 def render_chat_info(info: dict) -> Panel:
     p = get_palette()
     lines = []
+    
+    # Field display order for better UX
+    field_order = ["name", "type", "username", "id", "members", "admins", 
+                   "description", "pinned", "bot", "premium", "verified",
+                   "broadcast", "megagroup", "phone", "restricted"]
+    
+    seen = set()
+    
+    # Display fields in preferred order
+    for field in field_order:
+        if field in info:
+            v = info[field]
+            if v is None or v == "":
+                continue
+            seen.add(field)
+            
+            # Format field labels nicely
+            label = field.replace("_", " ").title()
+            if field == "members":
+                lines.append(f"[{p['dim']}]Members{'':<8}[/] [{p['accent']}]{v:,}[/]")
+            elif field == "admins":
+                lines.append(f"[{p['dim']}]Admins{'':<10}[/] [{p['accent']}]{v}[/]")
+            elif field == "pinned" and v:
+                lines.append(f"[{p['dim']}]Pinned Msg{'':<6}[/] [{p['accent']}]{v}[/]")
+            elif field in ("bot", "premium", "verified", "broadcast", "megagroup", "restricted"):
+                # Boolean fields - only show if True
+                if v:
+                    lines.append(f"[{p['accent']}]✓ {label}[/]")
+            else:
+                lines.append(f"[{p['dim']}]{label:<14}[/] [{p['fg']}]{v}[/]")
+    
+    # Display any remaining fields not in preferred order
     for k, v in info.items():
-        if v is None or v == "":
+        if k in seen or v is None or v == "":
             continue
-        lines.append(f"[{p['dim']}]{k:<14}[/] [{p['fg']}]{v}[/]")
+        label = k.replace("_", " ").title()
+        lines.append(f"[{p['dim']}]{label:<14}[/] [{p['fg']}]{v}[/]")
+    
     return Panel(
         "\n".join(lines),
         title=f"[{p['accent']}]Chat Info[/]",

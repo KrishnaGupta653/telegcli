@@ -456,6 +456,29 @@ class teleclient:
                 "megagroup":  getattr(full, "megagroup", False),
                 "broadcast":  getattr(full, "broadcast", False),
             })
+            
+            # Feature 7: Fetch full chat details for member count, admins, description
+            try:
+                if isinstance(full, Chat):
+                    # For regular groups
+                    full_chat = await self._client(functions.messages.GetFullChatRequest(full.id))
+                    info["members"]     = full_chat.full_chat.participants_count
+                    info["admins"]      = full_chat.full_chat.admins_count or 0
+                    info["description"] = full_chat.full_chat.about or ""
+                    info["pinned"]      = full_chat.full_chat.pinned_msg_id or 0
+                elif isinstance(full, Channel):
+                    # For channels and supergroups
+                    full_channel = await self._client(functions.channels.GetFullChannelRequest(full))
+                    info["members"]     = full_channel.full_channel.participants_count or 0
+                    info["admins"]      = 0  # TODO: fetch admin list if needed
+                    info["description"] = full_channel.full_channel.about or ""
+                    info["pinned"]      = full_channel.full_channel.pinned_msg_id or 0
+            except Exception as e:
+                log.debug("Failed to fetch full chat info: %s", e)
+                # Gracefully degrade if full info unavailable
+                info["members"] = getattr(full, "participants_count", 0)
+                info["description"] = ""
+        
         return info
 
     # ── events — separate registries (fix #6) ─────────────────────────

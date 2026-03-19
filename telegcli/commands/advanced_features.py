@@ -350,8 +350,8 @@ async def cmd_theme_preview(args: list[str]) -> None:
     cfg = get_config()
     
     # Get available themes from config
-    from telegcli.ui.theme import AVAILABLE_THEMES
-    available = AVAILABLE_THEMES if hasattr(__import__("telegcli.ui.theme"), "AVAILABLE_THEMES") else ["dark", "gruvbox", "tokyo", "light"]
+    from telegcli.ui.theme import THEMES
+    available = list(THEMES.keys())
     
     if args[0] == "preview":
         if len(args) < 2:
@@ -361,6 +361,7 @@ async def cmd_theme_preview(args: list[str]) -> None:
         theme_name = args[1].lower()
         if theme_name not in available:
             print_error(f"Theme '{theme_name}' not found. Available: {', '.join(available)}")
+            console.print(f"[{p['dim']}]Valid themes: {', '.join(available)}[/]")
             return
         
         # Show preview of the theme
